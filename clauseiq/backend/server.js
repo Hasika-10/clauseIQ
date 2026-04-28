@@ -12,6 +12,9 @@ const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 }
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// Serve static frontend files from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // ══ ANALYZE CONTRACT ══
@@ -283,7 +286,7 @@ app.post('/api/upload-pdf', upload.single('file'), async (req, res) => {
     res.json({ success: true, text: text.substring(0, 15000) });
   } catch (e) {
     console.error('Upload error:', e);
-    try { if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); } catch (err) {}
+    try { if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); } catch (err) { }
     res.status(500).json({ error: 'File processing failed.', details: e.message });
   }
 });
@@ -429,7 +432,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '3.0', model: 'gemini-2.5-flash', timestamp: new Date().toISOString() });
 });
 
-const PORT = process.env.PORT || 3001;
+// Catch-all route to serve the React frontend for any unmatched paths
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`\n🏛️  ClauseIQ Backend running on http://localhost:${PORT}`);
   console.log(`🤖  Model: gemini-2.5-flash`);
