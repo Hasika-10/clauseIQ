@@ -399,6 +399,7 @@ function ChatPanel({ analysis, contractText }) {
 // ══ RESULTS PANEL ══
 function ResultsPanel({ analysis, contractText, onReset }) {
   const [tab, setTab] = useState('clauses');
+  const [generatingReport, setGeneratingReport] = useState(false);
   const TABS = [
     { id: 'clauses', label: '📋 Clauses' },
     { id: 'heatmap', label: '🗺 Heatmap' },
@@ -504,6 +505,44 @@ function ResultsPanel({ analysis, contractText, onReset }) {
           </button>
         ))}
         <div style={{ flex: 1 }} />
+        <button
+          onClick={async () => {
+            setGeneratingReport(true);
+            const w = window.open('', '_blank');
+            if (!w) {
+              alert('Please allow popups to view the report. Your browser is blocking it!');
+              setGeneratingReport(false);
+              return;
+            }
+            w.document.write('<html><head><title>Loading Report...</title></head><body style="font-family: sans-serif; padding: 40px; text-align: center;"><h2>Generating Report...</h2><p>Please wait while AI creates your comprehensive legal report.</p></body></html>');
+            try {
+              const res = await fetch(`${API}/api/report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ analysis, contractText })
+              });
+              const data = await res.json();
+              if (data.success) {
+                w.document.open();
+                w.document.write(data.report);
+                w.document.close();
+              } else {
+                w.document.body.innerHTML = '<h2 style="color: red;">Report generation failed</h2><p>' + (data.error || '') + '</p>';
+              }
+            } catch (e) {
+              w.document.body.innerHTML = '<h2 style="color: red;">Network error</h2><p>Could not generate report.</p>';
+            }
+            setGeneratingReport(false);
+          }}
+          disabled={generatingReport}
+          style={{
+            padding: '9px 18px', borderRadius: 8, border: '1px solid var(--blue-border)',
+            cursor: generatingReport ? 'not-allowed' : 'pointer', fontSize: 12, fontFamily: 'var(--sans)', fontWeight: 600,
+            background: generatingReport ? 'rgba(255,255,255,0.1)' : 'var(--blue-dim)', color: generatingReport ? 'var(--ink3)' : 'var(--blue)', transition: 'all 0.2s', marginRight: 10
+          }}
+        >
+          {generatingReport ? 'Generating...' : '📄 Generate Report'}
+        </button>
         <button
           onClick={onReset}
           style={{
@@ -740,7 +779,7 @@ function UploadSection({ onAnalyze, analyzing }) {
 
         {/* Stats */}
         <div style={{ display: 'flex', gap: 32, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[['7-10', 'Clauses Analyzed'], ['< 30s', 'Analysis Time'], ['100%', 'AI-Powered']].map(([n, l]) => (
+          {[['3-5', 'Critical Clauses'], ['< 10s', 'Lightning Fast'], ['100%', 'AI-Powered']].map(([n, l]) => (
             <div key={l} style={{ textAlign: 'left', borderLeft: '2px solid var(--blue)', paddingLeft: 14 }}>
               <div style={{ fontFamily: 'var(--display)', fontSize: 26 }}>{n}</div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink3)', marginTop: 2, letterSpacing: '0.08em' }}>{l}</div>
@@ -850,7 +889,7 @@ function LoadingScreen() {
         if (prev > 0) setDoneSteps(d => [...d, prev]);
         return prev < STEPS.length ? prev + 1 : prev;
       });
-    }, 800);
+    }, 400);
     return () => clearInterval(interval);
   }, []);
 
@@ -894,11 +933,154 @@ function LoadingScreen() {
       </div>
     </div>
   );
+}// ══ LOGIN SCREEN ══
+function LoginScreen({ onLogin }) {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (isSignUp && !name) {
+      setError('Please enter your name.');
+      return;
+    }
+    if (!email || !password) {
+      setError('Please enter both email and password.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    
+    const endpoint = isSignUp ? `${API}/api/signup` : `${API}/api/login`;
+    const body = isSignUp ? { name, email, password } : { email, password };
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.success) {
+        onLogin();
+      } else {
+        setError(data.error || (isSignUp ? 'Sign up failed' : 'Invalid credentials'));
+      }
+    } catch (err) {
+      setError('Cannot connect to server. Ensure backend is running.');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      maxWidth: 400, margin: '100px auto', padding: '40px',
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)',
+      textAlign: 'center', position: 'relative', zIndex: 10
+    }}>
+      <div style={{ marginBottom: 30 }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>⚖️</div>
+        <h2 style={{ fontFamily: 'var(--display)', fontSize: 28, fontWeight: 400, marginBottom: 8 }}>
+          {isSignUp ? 'Create an Account' : 'Sign In'}
+        </h2>
+        <p style={{ color: 'var(--ink3)', fontSize: 14 }}>
+          {isSignUp ? 'Join ClauseIQ today' : 'Access your AI Contract Intelligence'}
+        </p>
+      </div>
+
+      {error && (
+        <div style={{
+          background: 'var(--red-dim)', border: '1px solid var(--red-border)',
+          borderRadius: 8, padding: '10px', fontSize: 13, color: '#FCA5A5',
+          marginBottom: 20
+        }}>
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {isSignUp && (
+          <input
+            type="text"
+            placeholder="Full Name"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            style={{
+              background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '14px 16px', fontSize: 14, color: 'var(--ink)',
+              outline: 'none', transition: 'border-color 0.2s'
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
+        )}
+        <input
+          type="email"
+          placeholder="Email address"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          style={{
+            background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '14px 16px', fontSize: 14, color: 'var(--ink)',
+            outline: 'none', transition: 'border-color 0.2s'
+          }}
+          onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border)'}
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          style={{
+            background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '14px 16px', fontSize: 14, color: 'var(--ink)',
+            outline: 'none', transition: 'border-color 0.2s'
+          }}
+          onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border)'}
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            background: loading ? 'var(--surface2)' : 'linear-gradient(135deg, var(--blue), var(--violet))',
+            border: 'none', borderRadius: 8, padding: '14px',
+            color: loading ? 'var(--ink3)' : 'white',
+            fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s', marginTop: 10,
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8
+          }}
+        >
+          {loading ? <><Spinner size={16} /> {isSignUp ? 'Signing up...' : 'Signing in...'}</> : (isSignUp ? 'Create Account' : 'Sign In to ClauseIQ')}
+        </button>
+      </form>
+      
+      <div style={{ marginTop: 24, fontSize: 14, color: 'var(--ink3)' }}>
+        {isSignUp ? 'Already have an account?' : "Don't have an account?"}
+        <button 
+          onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
+          type="button"
+          style={{ 
+            background: 'none', border: 'none', color: 'var(--blue)', 
+            fontWeight: 600, marginLeft: 6, cursor: 'pointer' 
+          }}
+        >
+          {isSignUp ? 'Sign In' : 'Sign Up'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ══ ROOT APP ══
 export default function App() {
-  const [state, setState] = useState('upload'); // upload | analyzing | results
+  const [state, setState] = useState('login'); // login | upload | analyzing | results
   const [analysis, setAnalysis] = useState(null);
   const [contractText, setContractText] = useState('');
   const [error, setError] = useState('');
@@ -915,7 +1097,14 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contractText: text })
       });
-      const data = await res.json();
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseError) {
+        throw new Error('Invalid response from server. Check if API Key is valid.');
+      }
+      
       if (data.success) {
         setAnalysis(data.analysis);
         setState('results');
@@ -924,7 +1113,7 @@ export default function App() {
         setState('upload');
       }
     } catch (e) {
-      setError('Cannot reach backend. Make sure the server is running on port 3001.');
+      setError(e.message || 'Cannot reach backend. Make sure the server is running on port 3001.');
       setState('upload');
     }
   }, []);
@@ -988,6 +1177,7 @@ export default function App() {
           </div>
         )}
 
+        {state === 'login' && <LoginScreen onLogin={() => setState('upload')} />}
         {state === 'upload' && <UploadSection onAnalyze={analyze} analyzing={false} />}
         {state === 'analyzing' && <LoadingScreen />}
         {state === 'results' && analysis && (
